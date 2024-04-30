@@ -197,11 +197,11 @@ class SDFeaturizer:
         onestep_pipe = onestep_pipe.to("cuda")
         onestep_pipe.enable_attention_slicing()
         onestep_pipe.enable_xformers_memory_efficient_attention()
-        null_prompt_embeds = onestep_pipe._encode_prompt(
+        null_prompt_embeds = onestep_pipe.encode_prompt(
             prompt=null_prompt,
             device='cuda',
             num_images_per_prompt=1,
-            do_classifier_free_guidance=False) # [1, 77, dim]
+            do_classifier_free_guidance=False)[0] # [1, 77, dim]
 
         self.null_prompt_embeds = null_prompt_embeds
         self.null_prompt = null_prompt
@@ -228,11 +228,11 @@ class SDFeaturizer:
         if prompt == self.null_prompt:
             prompt_embeds = self.null_prompt_embeds
         else:
-            prompt_embeds = self.pipe._encode_prompt(
+            prompt_embeds = self.pipe.encode_prompt(
                 prompt=prompt,
                 device='cuda',
                 num_images_per_prompt=1,
-                do_classifier_free_guidance=False) # [1, 77, dim]
+                do_classifier_free_guidance=False)[0] # [1, 77, dim]
         prompt_embeds = prompt_embeds.repeat(ensemble_size, 1, 1)
         unet_ft_all = self.pipe(
             img_tensor=img_tensor,
