@@ -1,4 +1,4 @@
-from diffusers import StableDiffusionPipeline
+from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline
 import torch
 import torch.nn as nn
 import matplotlib.pyplot as plt
@@ -159,6 +159,34 @@ class MyUNet2DConditionModel(UNet2DConditionModel):
         output['up_ft'] = up_ft
         return output
 
+
+class OneStepSDXLPipeline(StableDiffusionXLPipeline):
+    @torch.no_grad()
+    def __call__(
+            self,
+            img_tensor,
+            t,
+            up_ft_indices,
+            negative_prompt: Optional[Union[str, List[str]]] = None,
+            generator: Optional[Union[torch.Generator, List[torch.Generator]]] = None,
+            prompt_embeds: Optional[torch.FloatTensor] = None,
+            callback: Optional[Callable[[int, int, torch.FloatTensor], None]] = None,
+            callback_steps: int = 1,
+            cross_attention_kwargs: Optional[Dict[str, Any]] = None
+    ):
+        device = self._execution_device
+        latents = self.vae.encode(img_tensor).latent_dist.sample() * self.vae.config.scaling_factor
+        t = torch.tensor(t, dtype=torch.long, device=device)
+        noise = torch.randn_like(latents).to(device)
+        latents_noisy = self.scheduler.add_noise(latents, noise, t)
+        unet_output = self.unet(latents_noisy,
+                                t,
+                                up_ft_indices,
+                                encoder_hidden_states=prompt_embeds,
+                                cross_attention_kwargs=cross_attention_kwargs)
+        return unet_output
+
+
 class OneStepSDPipeline(StableDiffusionPipeline):
     @torch.no_grad()
     def __call__(
@@ -188,9 +216,16 @@ class OneStepSDPipeline(StableDiffusionPipeline):
 
 
 class SDFeaturizer:
-    def __init__(self, sd_id='stabilityai/stable-diffusion-2-1', null_prompt=''):
+    def __init__(self, sd_id='stabilityai/stable-diffusion-2-1', null_prompt='', pipe_choice='sd'):
         unet = MyUNet2DConditionModel.from_pretrained(sd_id, subfolder="unet")
-        onestep_pipe = OneStepSDPipeline.from_pretrained(sd_id, unet=unet, safety_checker=None)
+
+        if pipe_choice == 'sd':
+            onestep_pipe = OneStepSDPipeline.from_pretrained(sd_id, unet=unet, safety_checker=None)
+        elif pipe_choice == 'sdxl':
+            onestep_pipe = OneStepSDXLPipeline.from_pretrained(sd_id, unet=unet, safety_checker=None)
+        else:
+            raise ValueError(f"Unexpected pipe choice: {pipe_choice}")
+
         onestep_pipe.vae.decoder = None
         onestep_pipe.scheduler = DDIMScheduler.from_pretrained(sd_id, subfolder="scheduler")
         gc.collect()
