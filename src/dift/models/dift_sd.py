@@ -1,15 +1,12 @@
 from diffusers import StableDiffusionPipeline, StableDiffusionXLPipeline
 import torch
-import torch.nn as nn
-import matplotlib.pyplot as plt
 import numpy as np
 from typing import Any, Callable, Dict, List, Optional, Union
 from diffusers.models.unets.unet_2d_condition import UNet2DConditionModel
 from diffusers import DDIMScheduler
 import gc
-import os
-from PIL import Image
 from torchvision.transforms import PILToTensor
+import warnings
 
 class MyUNet2DConditionModel(UNet2DConditionModel):
     def forward(
@@ -231,7 +228,10 @@ class SDFeaturizer:
         gc.collect()
         onestep_pipe = onestep_pipe.to("cuda")
         onestep_pipe.enable_attention_slicing()
-        onestep_pipe.enable_xformers_memory_efficient_attention()
+        try:
+            onestep_pipe.enable_xformers_memory_efficient_attention()
+        except ModuleNotFoundError as mnfe:
+            warnings.warn(f'[DIFT] xformers not installed, cannot enable efficient attention -> {mnfe}')
         null_prompt_embeds = onestep_pipe.encode_prompt(
             prompt=null_prompt,
             device='cuda',
